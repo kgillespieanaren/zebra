@@ -212,6 +212,11 @@
      *  @constructor
      */
     pkg.MouseWheelSupport = zebra.Class([
+        function $clazz() {
+            this.dxZoom = this.dyZoom = 20;
+            this.dxNorma = this.dyNorma = 80;
+        },
+
         function $prototype() {
             this.naturalDirection = true;
 
@@ -222,31 +227,30 @@
              */
             this.wheeled  = function(e){
                 var owner = pkg.$mouseMoveOwner;
-
-                while (owner != null && zebra.instanceOf(owner, pkg.ScrollPan) === false) {
+                while (owner != null && owner.doScroll == null) {
                     owner = owner.parent;
                 }
 
-                if (owner != null && (owner.vBar != null || owner.hBar != null)) {
-                    var dv = e[this.wheelInfo.dy] * this.wheelInfo.dir;
+                if (owner != null) {
+                    var dy = e[this.wheelInfo.dy] != null ? e[this.wheelInfo.dy] * this.wheelInfo.dir : 0,
+                        dx = e[this.wheelInfo.dx] != null ? e[this.wheelInfo.dx] * this.wheelInfo.dir : 0;
 
-                    if (dv !== 0 && owner.vBar != null) {
-                        var bar = owner.vBar;
-                        if (Math.abs(dv) < 1) {
-                            dv *= bar.pageIncrement;
-                        }
-
-                        dv = Math.abs(dv) > 100 ? dv % 100 : dv;
-                        if (bar.isVisible === true) {
-                            var v =  bar.position.offset + dv;
-
-
-                            if (v >= 0) bar.position.setOffset(v);
-                            else        bar.position.setOffset(0);
-                        }
+                    // some version of FF can generates dx/dy  < 1
+                    if (Math.abs(dy) < 1) {
+                        dy *= this.$clazz.dyZoom;
                     }
 
-                    e.preventDefault();
+                    if (Math.abs(dx) < 1) {
+                        dx *= this.$clazz.dxZoom;
+                    }
+
+
+                    dy = Math.abs(dy) > this.$clazz.dyNorma ? dy % this.$clazz.dyNorma : dy;
+                    dx = Math.abs(dx) > this.$clazz.dxNorma ? dx % this.$clazz.dxNorma : dx;
+
+                    if (owner.doScroll(dx, dy, "wheel")) {
+                        e.preventDefault();
+                    }
                 }
             };
         },
@@ -259,13 +263,15 @@
             var WHEEL = {
                 wheel: {
                     dy  : "deltaY",
+                    dx  : "deltaX",
                     dir : 1,
                     test: function() {
-                        return "onwheel" in document.createElement("div");
+                        return "WheelEvent" in window;
                     }
                 },
                 mousewheel: {
                     dy  : "wheelDelta",
+                    dx  : "wheelDeltaX",
                     dir : -1,
                     test: function() {
                         return document.onmousewheel !== undefined;
@@ -443,13 +449,14 @@
                     }
 
                     for(var i=0; i < mt.length; i++) {
-                        var nmt = mt[i], t = $this.touches[nmt.identifier];
+                        var nmt = mt[i],
+                            t   = $this.touches[nmt.identifier];
 
-                        if (t != null) {
-                            if (t.pageX != nmt.pageX || t.pageY != nmt.pageY) {
+                        if (t != null && (t.pageX != nmt.pageX || t.pageY != nmt.pageY)) {
                                 var dx  = nmt.pageX - t.pageX,
                                     dy  = nmt.pageY - t.pageY,
-                                    d   = t.direction, gamma = null,
+                                    d   = t.direction,
+                                    gamma = null,
                                     dxs = (dx < 0 && t.dx < 0) || (dx > 0 && t.dx > 0),  // test if horizontal move direction has been changed
                                     dys = (dy < 0 && t.dy < 0) || (dy > 0 && t.dy > 0);  // test if vertical move direction has been changed
 
@@ -487,14 +494,13 @@
                                 if ($this.timer == null) {
                                     t.dx = dx;
                                     t.dy = dy;
-                                    $this.moved(t);
+                                    if ($this.moved != null) $this.moved(t);
                                 }
                                 else {
                                     $this.dc = 0;
                                 }
                             }
                         }
-                    }
 
                     e.preventDefault();
                 }, false);

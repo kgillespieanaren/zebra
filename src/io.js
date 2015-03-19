@@ -227,11 +227,11 @@ pkg.QS = Class([
     }
 ]);
 
-function $Request() {
+var $Request = pkg.$Request = function() {
     this.responseText = this.statusText = "";
     this.onreadystatechange = this.responseXml = null;
     this.readyState = this.status = 0;
-}
+};
 
 $Request.prototype.open = function(method, url, async, user, password) {
     if (location.protocol.toLowerCase() == "file:" ||
@@ -368,19 +368,14 @@ pkg.getRequest = function() {
                 catch(e) {
                     if (!e.message || e.message.toUpperCase().indexOf("NS_ERROR_FAILURE") < 0) {
                         // exception has to be re-instantiate to be Error class instance
-                        var ee = new Error(e.toString());
-                        throw ee;
+                        throw new Error(e.toString());
                     }
                 }
             };
         }
 
-        // CORS is supported out of box
-        if ("withCredentials" in r) {
-            return r;
-        }
-
-        return new $Request(); // IE
+        return ("withCredentials" in r) ? r  // CORS is supported out of box
+                                        : new $Request(); // IE
     }
 
     throw new Error("Archaic browser detected");

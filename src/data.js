@@ -100,7 +100,6 @@ var oobi = "Index is out of bounds: ";
 
 function Line(s) {
     this.s = s;
-    this.l = 0;
 }
 
 //  toString for array.join method
@@ -130,55 +129,79 @@ pkg.Text = Class(pkg.TextModel, [
             return [];
         };
 
-        this.setExtraChar = function(i,ch){ this.lines[i].l = ch; };
-
-        this.getExtraChar = function (i) { return this.lines[i].l; };
-
-        this.getLine = function(line) { return this.lines[line].s; };
-
-        this.getValue = function(){ return this.lines.join("\n"); };
-
-        this.getLines = function () { return this.lines.length; };
-
-        this.getTextLength = function() { return this.textLength; };
-
-        this.write = function (s, offset){
-            var slen = s.length,
-                info = this.getLnInfo(this.lines, 0, 0, offset),
-                line    = this.lines[info[0]].s,
-                j       = 0,
-                lineOff = offset - info[1],
-                tmp = [line.substring(0, lineOff), s, line.substring(lineOff)].join('');
-
-            for(; j < slen && s[j] != '\n'; j++);
-
-            if(j >= slen) {
-                this.lines[info[0]].s = tmp;
-                j = 1;
-            }
-            else {
-                this.lines.splice(info[0], 1);
-                j = this.parse(info[0], tmp, this.lines);
-            }
-            this.textLength += slen;
-            this._.textUpdated(this, true, offset, slen, info[0], j);
+        this.$lineTags = function(i, value) {
+            return this.lines[i];
         };
 
-        this.remove = function (offset,size){
-            var i1   = this.getLnInfo(this.lines, 0, 0, offset),
-                i2   = this.getLnInfo(this.lines, i1[0], i1[1], offset + size),
-                l2   = this.lines[i2[0]].s,
-                l1   = this.lines[i1[0]].s,
-                off1 = offset - i1[1], off2 = offset + size - i2[1],
-                buf  = [l1.substring(0, off1), l2.substring(off2)].join('');
+        this.getLine = function(line) {
+            return this.lines[line].s;
+        };
 
-            if (i2[0] == i1[0]) this.lines.splice(i1[0], 1, new Line(buf));
-            else {
-                this.lines.splice(i1[0], i2[0] - i1[0] + 1);
-                this.lines.splice(i1[0], 0, new Line(buf));
+        this.getValue = function() {
+            return this.lines.join("\n");
+        };
+
+        this.getLines = function () {
+            return this.lines.length;
+        };
+
+        this.getTextLength = function() {
+            return this.textLength;
+        };
+
+        this.write = function (s, offset) {
+            if (s.length > 0) {
+                var slen    = s.length,
+                    info    = this.getLnInfo(this.lines, 0, 0, offset),
+                    line    = this.lines[info[0]].s,
+                    j       = 0,
+                    lineOff = offset - info[1],
+                    tmp     = line.substring(0, lineOff) + s + line.substring(lineOff);
+
+                for(; j < slen && s[j] != '\n'; j++);
+
+                if (j >= slen) {
+                    this.lines[info[0]].s = tmp;
+                    j = 1;
+                }
+                else {
+                    this.lines.splice(info[0], 1);
+                    j = this.parse(info[0], tmp, this.lines);
+                }
+
+                if (slen > 0) {
+                    this.textLength += slen;
+                    this._.textUpdated(this, true, offset, slen, info[0], j);
+                    return true;
+                }
             }
-            this.textLength -= size;
-            this._.textUpdated(this, false, offset, size, i1[0], i2[0] - i1[0] + 1);
+            return false;
+        };
+
+        this.remove = function(offset, size) {
+            if (size > 0) {
+                var i1   = this.getLnInfo(this.lines, 0, 0, offset),
+                    i2   = this.getLnInfo(this.lines, i1[0], i1[1], offset + size),
+                    l2   = this.lines[i2[0]].s,
+                    l1   = this.lines[i1[0]].s,
+                    off1 = offset - i1[1], off2 = offset + size - i2[1],
+                    buf  = l1.substring(0, off1) + l2.substring(off2);
+
+                if (i2[0] == i1[0]) {
+                    this.lines.splice(i1[0], 1, new Line(buf));
+                }
+                else {
+                    this.lines.splice(i1[0], i2[0] - i1[0] + 1);
+                    this.lines.splice(i1[0], 0, new Line(buf));
+                }
+
+                if (size > 0) {
+                    this.textLength -= size;
+                    this._.textUpdated(this, false, offset, size, i1[0], i2[0] - i1[0] + 1);
+                    return true;
+                }
+            }
+            return false;
         };
 
         this.parse = function (startLine, text, lines){
@@ -209,7 +232,9 @@ pkg.Text = Class(pkg.TextModel, [
                 this.parse(0, text, this.lines);
                 this.textLength = text.length;
                 this._.textUpdated(this, true, 0, this.textLength, 0, this.getLines());
+                return true;
             }
+            return false;
         };
 
         this[''] = function(s){
@@ -239,12 +264,8 @@ pkg.SingleLineTxt = Class(pkg.TextModel, [
          * @readOnly
          */
 
-        this.setExtraChar = function(i,ch) {
-            this.extra = ch;
-        };
-
-        this.getExtraChar = function(i){
-            return this.extra;
+        this.$lineTags = function(i) {
+            return this;
         };
 
         this.getValue = function(){
@@ -272,20 +293,40 @@ pkg.SingleLineTxt = Class(pkg.TextModel, [
             return this.buf;
         };
 
-        this.write = function(s,offset){
-            var buf = this.buf, j = s.indexOf("\n");
-            if (j >= 0) s = s.substring(0, j);
-            var l = (this.maxLen > 0 && (buf.length + s.length) >= this.maxLen) ? this.maxLen - buf.length
-                                                                                : s.length;
-            if (l!==0) {
-                this.buf = [buf.substring(0, offset), s.substring(0, l), buf.substring(offset)].join('');
-                if (l > 0) this._.textUpdated(this, true, offset, l, 0, 1);
+        this.write = function(s,offset) {
+            // cut to the first new line character
+            var j = s.indexOf("\n");
+            if (j >= 0) {
+                s = s.substring(0, j);
             }
+
+            var l = (this.maxLen > 0 && (this.buf.length + s.length) >= this.maxLen) ? this.maxLen - this.buf.length
+                                                                                     : s.length;
+            if (l !== 0) {
+                var nl = this.buf.substring(0, offset) + s.substring(0, l) + this.buf.substring(offset);
+                if (this.validate == null || this.validate(nl)) {
+                    this.buf = nl;
+                    if (l > 0) {
+                        this._.textUpdated(this, true, offset, l, 0, 1);
+                        return true;
+                    }
+                }
+            }
+            return false;
         };
 
         this.remove = function(offset,size){
-            this.buf = [ this.buf.substring(0, offset), this.buf.substring(offset + size)].join('');
-            this._.textUpdated(this, false, offset, size, 0, 1);
+            if (size > 0) {
+                var nl = this.buf.substring(0, offset) +
+                         this.buf.substring(offset + size);
+
+                if (nl.length != this.buf.length && (this.validate == null || this.validate(nl))) {
+                    this.buf = nl;
+                    this._.textUpdated(this, false, offset, size, 0, 1);
+                    return true;
+                }
+            }
+            return false;
         };
 
         this.setValue = function(text){
@@ -293,14 +334,26 @@ pkg.SingleLineTxt = Class(pkg.TextModel, [
                 throw new Error("Invalid null string");
             }
 
+            // cut to next line
             var i = text.indexOf('\n');
-            if (i >= 0) text = text.substring(0, i);
-            if(this.buf == null || this.buf !== text) {
-                if (this.buf != null && this.buf.length > 0) this._.textUpdated(this, false, 0, this.buf.length, 0, 1);
-                if (this.maxLen > 0 && text.length > this.maxLen) text = text.substring(0, this.maxLen);
+            if (i >= 0) {
+                text = text.substring(0, i);
+            }
+
+            if ((this.buf == null || this.buf !== text) && (this.validate == null || this.validate(text))) {
+                if (this.buf != null && this.buf.length > 0) {
+                    this._.textUpdated(this, false, 0, this.buf.length, 0, 1);
+                }
+
+                if (this.maxLen > 0 && text.length > this.maxLen) {
+                    text = text.substring(0, this.maxLen);
+                }
+
                 this.buf = text;
                 this._.textUpdated(this, true, 0, text.length, 0, 1);
+                return true;
             }
+            return false;
         };
 
         /**
@@ -309,11 +362,21 @@ pkg.SingleLineTxt = Class(pkg.TextModel, [
          * @param  {Integer} max a maximal length of text
          */
         this.setMaxLength = function (max){
-            if(max != this.maxLen){
+            if (max != this.maxLen){
                 this.maxLen = max;
                 this.setValue("");
             }
         };
+
+        /**
+         *  Validate the given text. This method can be implemented to prevent
+         *  inserting text in text model that doesn't satisfy the given condition.
+         *  For instance text can allow only numeric.
+         *  @method validate
+         *  @param {String} text a text
+         *  @return {Boolean} return true if the text is valid otherwise return false
+         */
+
 
         this[''] = function (s, max) {
             this.maxLen = max == null ? -1 : max;
@@ -831,9 +894,9 @@ pkg.Matrix = Class([
          */
         this.get = function (row,col){
             if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) {
-                throw new Error("Row of col is out of bounds: " + row + "," + col);
+                throw new Error("Row or col is out of bounds: " + row + "," + col);
             }
-            return this.objs[row][col];
+            return this.objs[row] == null ? undefined : this.objs[row][col];
         };
 
         /**
@@ -845,13 +908,19 @@ pkg.Matrix = Class([
          * @param  {Object} obj a new cell value
          */
         this.put = function(row,col,obj){
-            var nr = this.rows, nc = this.cols;
+            var nr = this.rows,
+                nc = this.cols;
+
             if (row >= nr) nr += (row - nr + 1);
             if (col >= nc) nc += (col - nc + 1);
 
             this.setRowsCols(nr, nc);
-            var old = this.objs[row] ? this.objs[row][col] : undefined;
+            var old = this.objs[row] != null ? this.objs[row][col] : undefined;
             if (obj != old) {
+
+                // allocate array if no data for the given row exists
+                if (this.objs[row] == null) this.objs[row] = [];
+
                 this.objs[row][col] = obj;
                 this._.cellModified(this, row, col, old);
             }
@@ -881,25 +950,26 @@ pkg.Matrix = Class([
                 var pc = this.cols,
                     pr = this.rows;
 
-                this.rellocate(rows, cols);
                 this.cols = cols;
                 this.rows = rows;
-                this._.matrixResized(this, pr, pc);
-            }
-        };
 
-        /**
-         * Reallocate the matrix model space with the new number of rows and columns
-         * @method re-locate.
-         * @private
-         * @param  {Integer} r a new number of rows
-         * @param  {Integer} c a new number of columns
-         */
-        this.rellocate = function(r, c) {
-            if (r >= this.rows) {
-                for(var i=this.rows; i < r; i++) {
-                    this.objs[i] = [];
+                // re-locate matrix space
+                if (this.objs.length > rows) {
+                    this.objs.length = rows;   // shrink number of rows
                 }
+
+                // shrink columns
+                if (pc > cols) {
+                    for(var i = 0; i < this.objs.length; i++) {
+                        // check if data for columns has been allocated and the size
+                        // is greater than set number of columns
+                        if (this.objs[i] != null && this.objs[i].length > cols) {
+                            this.objs[i].length = cols;
+                        }
+                    }
+                }
+
+                this._.matrixResized(this, pr, pc);
             }
         };
 
@@ -925,21 +995,19 @@ pkg.Matrix = Class([
          * Remove specified number of rows from the model starting
          * from the given row.
          * @method removeRows
-         * @param  {Integer}  begrow a start row
+         * @param  {Integer} begrow a start row
          * @param  {Integer} count  a number of rows to be removed
          */
-        this.removeRows = function(begrow,count){
+        this.removeRows = function(begrow,count) {
+            if (arguments.length === 1) {
+                count = 1;
+            }
+
             if (begrow < 0 || begrow + count > this.rows) {
-                throw new Error();
+                throw new Error("Invalid row " + begrow);
             }
 
-            for(var i = (begrow + count);i < this.rows; i++, begrow++){
-                for(var j = 0;j < this.cols; j ++ ){
-                    this.objs[begrow][j] = this.objs[i][j];
-                    this.objs[i][j] = null;
-                }
-            }
-
+            this.objs.splice(begrow, count);
             this.rows -= count;
             this._.matrixResized(this, this.rows + count, this.cols);
         };
@@ -952,14 +1020,17 @@ pkg.Matrix = Class([
          * @param  {Integer} count  a number of columns to be removed
          */
         this.removeCols = function (begcol,count){
-            if (begcol < 0 || begcol + count > this.cols) {
-                throw new Error();
+            if (arguments.length === 1) {
+                count = 1;
             }
 
-            for(var i = (begcol + count);i < this.cols; i++, begcol++){
-                for(var j = 0;j < this.rows; j++){
-                    this.objs[j][begcol] = this.objs[j][i];
-                    this.objs[j][i] = null;
+            if (begcol < 0 || begcol + count > this.cols) {
+                throw new Error("Invalid column : " + begcol);
+            }
+
+            for(var i = 0; i < this.objs.length; i++) {
+                if (this.objs[i] != null && this.objs[i].length > 0) {
+                    this.objs[i].splice(begcol, count);
                 }
             }
 
@@ -974,11 +1045,22 @@ pkg.Matrix = Class([
          * @method insertRows
          */
         this.insertRows = function(row, count) {
-            if (arguments.length === 1) count = 1;
-            for(var i=0; i < count; i++) {
-                this.objs.splice(row, 0, []);
-                this._.matrixRowInserted(this, row + i);
+            if (arguments.length === 1) {
+                count = 1;
             }
+
+            if (row <= this.objs.length - 1) {
+                for(var i = 0; i < count; i++) {
+                    this.objs.splice(row, 0, undefined);
+                    this._.matrixRowInserted(this, row + i);
+                }
+            }
+            else {
+                for(var i = 0; i < count; i++) {
+                    this._.matrixRowInserted(this, row + i);
+                }
+            }
+
             this.rows += count;
             this._.matrixResized(this, this.rows - count, this.cols);
         };
@@ -990,13 +1072,21 @@ pkg.Matrix = Class([
          * @method insertCols
          */
         this.insertCols = function(col, count) {
-            if (arguments.length === 1) count = 1;
-            for(var j=0; j < count; j++) {
-                for(var i=0; i < this.rows; i++) {
-                    this.objs[i].splice(col, 0, undefined);
-                }
-                this._.matrixColInserted(this, col + j);
+            if (arguments.length === 1) {
+                count = 1;
             }
+
+            if (this.objs.length  > 0) {
+                for(var j = 0; j < count; j++) {
+                    for(var i = 0; i < this.rows; i++) {
+                        if (this.objs[i] != null && j <= this.objs[i].length) {
+                            this.objs[i].splice(col, 0, undefined);
+                        }
+                    }
+                    this._.matrixColInserted(this, col + j);
+                }
+            }
+
             this.cols += count;
             this._.matrixResized(this, this.rows, this.cols - count);
         };
@@ -1015,7 +1105,7 @@ pkg.Matrix = Class([
             }
 
             this.objs.sort(function(a, b) {
-                return f(a[col],b[col]);
+                return f(a[col], b[col]);
             });
 
             this._.matrixSorted(this, { col : col,
